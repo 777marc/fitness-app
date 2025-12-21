@@ -4,9 +4,10 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { Plus, Edit, Trash2, Calendar } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Edit, Trash2, Calendar, Clock } from "lucide-react";
+import { format, addDays } from "date-fns";
 import { toast } from "react-toastify";
+import Link from "next/link";
 
 interface Workout {
   id: string;
@@ -17,10 +18,22 @@ interface Workout {
   date: string;
 }
 
+interface ScheduledWorkout {
+  id: string;
+  scheduledDate: string;
+  completed: boolean;
+  notes: string | null;
+  workoutType?: { id: string; name: string } | null;
+  customWorkout?: { id: string; name: string } | null;
+}
+
 export default function DashboardPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
   const [workouts, setWorkouts] = useState<Workout[]>([]);
+  const [scheduledWorkouts, setScheduledWorkouts] = useState<
+    ScheduledWorkout[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -36,23 +49,41 @@ export default function DashboardPage() {
     if (status === "unauthenticated") {
       router.push("/login");
     } else if (status === "authenticated") {
-      fetchWorkouts();
+      fetchData();
     }
   }, [status, router]);
 
-  const fetchWorkouts = async () => {
+  const fetchData = async () => {
     try {
-      const response = await fetch("/api/workouts");
-      if (response.ok) {
-        const data = await response.json();
+      const today = new Date();
+      const endDate = addDays(today, 7);
+
+      const [workoutsResponse, scheduleResponse] = await Promise.all([
+        fetch("/api/workouts"),
+        fetch(
+          `/api/schedule?startDate=${today.toISOString()}&endDate=${endDate.toISOString()}`
+        ),
+      ]);
+
+      if (workoutsResponse.ok) {
+        const data = await workoutsResponse.json();
         setWorkouts(data);
       }
+
+      if (scheduleResponse.ok) {
+        const data = await scheduleResponse.json();
+        setScheduledWorkouts(
+          data.filter((w: ScheduledWorkout) => !w.completed)
+        );
+      }
     } catch (error) {
-      console.error("Error fetching workouts:", error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchWorkouts = fetchData;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,6 +193,50 @@ export default function DashboardPage() {
             Add New Workout
           </button>
         </div>
+
+        {/* Upcoming Scheduled Workouts */}
+        {scheduledWorkouts.length > 0 && (
+          <div className="card p-6 mb-8">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Clock className="w-5 h-5 text-blue-500" />
+                Upcoming Scheduled Workouts
+              </h2>
+              <Link
+                href="/schedule"
+                className="text-blue-500 hover:text-blue-400 text-sm"
+              >
+                View Schedule →
+              </Link>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {scheduledWorkouts.map((workout) => (
+                <div
+                  key={workout.id}
+                  className="bg-gray-700 p-4 rounded-lg hover:bg-gray-600 transition-colors"
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="font-semibold">
+                        {workout.workoutType?.name ||
+                          workout.customWorkout?.name}
+                      </p>
+                      <p className="text-sm text-gray-400 flex items-center gap-1 mt-1">
+                        <Calendar className="w-4 h-4" />
+                        {format(new Date(workout.scheduledDate), "EEE, MMM dd")}
+                      </p>
+                    </div>
+                  </div>
+                  {workout.notes && (
+                    <p className="text-xs text-gray-400 mt-2">
+                      {workout.notes}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {showForm && (
           <div className="card p-6 mb-8">
