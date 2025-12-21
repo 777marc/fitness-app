@@ -1,0 +1,131 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(cuid())
+  username          String             @unique
+  email             String             @unique
+  password          String
+  createdAt         DateTime           @default(now())
+  workouts          Workout[]
+  scheduledWorkouts ScheduledWorkout[]
+  customWorkouts    CustomWorkout[]
+  accounts          Account[]
+  sessions          Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Workout {
+  id                String             @id @default(cuid())
+  exercise          String
+  duration          Int // in minutes
+  calories          Int
+  notes             String?
+  date              DateTime
+  createdAt         DateTime           @default(now())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scheduledWorkouts ScheduledWorkout[]
+}
+
+model WorkoutType {
+  id                String             @id @default(cuid())
+  name              String
+  defaultDuration   Int?
+  defaultCalories   Int?
+  scheduledWorkouts ScheduledWorkout[]
+}
+
+model ScheduledWorkout {
+  id              String        @id @default(cuid())
+  scheduledDate   DateTime
+  completed       Boolean       @default(false)
+  notes           String?
+  userId          String
+  workoutTypeId   String?
+  customWorkoutId String?
+  workoutId       String?
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workoutType     WorkoutType?  @relation(fields: [workoutTypeId], references: [id])
+  customWorkout   CustomWorkout? @relation(fields: [customWorkoutId], references: [id])
+  workout         Workout?      @relation(fields: [workoutId], references: [id])
+}
+
+model Exercise {
+  id                   String                  @id @default(cuid())
+  name                 String
+  category             String
+  primaryMuscleGroups  String?
+  equipment            String?
+  difficulty           String?
+  workoutGoal          String?
+  location             String?
+  customWorkoutExercises CustomWorkoutExercise[]
+}
+
+model CustomWorkout {
+  id                     String                  @id @default(cuid())
+  name                   String
+  description            String?
+  createdAt              DateTime                @default(now())
+  userId                 String
+  user                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  exercises              CustomWorkoutExercise[]
+  scheduledWorkouts      ScheduledWorkout[]
+}
+
+model CustomWorkoutExercise {
+  id              String        @id @default(cuid())
+  customWorkoutId String
+  exerciseId      String
+  sets            Int?
+  reps            Int?
+  duration        Int?
+  order           Int
+  notes           String?
+  customWorkout   CustomWorkout @relation(fields: [customWorkoutId], references: [id], onDelete: Cascade)
+  exercise        Exercise      @relation(fields: [exerciseId], references: [id])
+}
