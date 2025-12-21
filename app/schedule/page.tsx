@@ -97,13 +97,16 @@ export default function SchedulePage() {
     }
 
     try {
+      // Create date at noon to avoid timezone issues
+      const dateAtNoon = new Date(selectedDate + "T12:00:00");
+
       const response = await fetch("/api/schedule", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          scheduledDate: selectedDate,
+          scheduledDate: dateAtNoon.toISOString(),
           workoutTypeId: formData.workoutTypeId || null,
           customWorkoutId: formData.customWorkoutId || null,
           notes: formData.notes || null,
