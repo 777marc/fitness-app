@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import { Plus, Edit, Trash2, Calendar, Clock } from "lucide-react";
+import { Plus, Edit, Trash2, Calendar, Clock, X } from "lucide-react";
 import { format, addDays } from "date-fns";
 import { toast } from "react-toastify";
 import Link from "next/link";
@@ -36,6 +36,9 @@ export default function DashboardPage() {
   >([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedScheduledWorkout, setSelectedScheduledWorkout] =
+    useState<ScheduledWorkout | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     exercise: "",
@@ -213,7 +216,13 @@ export default function DashboardPage() {
               {scheduledWorkouts.map((workout) => (
                 <div
                   key={workout.id}
-                  className="bg-gray-700 p-4 rounded-lg hover:bg-gray-600 transition-colors"
+                  onClick={() => {
+                    console.log("Workout clicked:", workout);
+                    setSelectedScheduledWorkout(workout);
+                    setShowModal(true);
+                    console.log("Modal should show now");
+                  }}
+                  className="bg-gray-700 p-4 rounded-lg hover:bg-gray-600 transition-colors cursor-pointer"
                 >
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -234,6 +243,77 @@ export default function DashboardPage() {
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Scheduled Workout Detail Modal */}
+        {showModal && selectedScheduledWorkout && (
+          <div
+            className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-[9999] p-4"
+            onClick={() => setShowModal(false)}
+          >
+            <div
+              className="bg-gray-800 rounded-lg shadow-2xl border border-gray-600 p-6 max-w-md w-full max-h-[90vh] overflow-y-auto"
+              style={{ backgroundColor: "#1f2937" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-2xl font-bold">
+                  {selectedScheduledWorkout.workoutType?.name ||
+                    selectedScheduledWorkout.customWorkout?.name}
+                </h2>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="text-gray-400 hover:text-white"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Scheduled Date</p>
+                  <p className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-blue-500" />
+                    {format(
+                      new Date(selectedScheduledWorkout.scheduledDate),
+                      "EEEE, MMMM dd, yyyy"
+                    )}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-sm text-gray-400 mb-1">Type</p>
+                  <p>
+                    {selectedScheduledWorkout.workoutType
+                      ? "Workout Type"
+                      : "Custom Workout"}
+                  </p>
+                </div>
+
+                {selectedScheduledWorkout.notes && (
+                  <div>
+                    <p className="text-sm text-gray-400 mb-1">Notes</p>
+                    <p className="text-sm">{selectedScheduledWorkout.notes}</p>
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-4">
+                  <Link
+                    href="/schedule"
+                    className="btn-primary flex-1 text-center"
+                  >
+                    View in Schedule
+                  </Link>
+                  <button
+                    onClick={() => setShowModal(false)}
+                    className="btn-secondary flex-1"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}
