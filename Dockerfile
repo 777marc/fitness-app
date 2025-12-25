@@ -17,6 +17,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Generate Prisma Client
+# Provide a dummy DATABASE_URL for build-time generation (not used for actual connection)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
 RUN npx prisma generate
 
 # Build the Next.js app
@@ -26,6 +28,9 @@ RUN npm run build
 # Stage 3: Runner
 FROM node:20-alpine AS runner
 WORKDIR /app
+
+# Install netcat for database connection checks
+RUN apk add --no-cache netcat-openbsd
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
