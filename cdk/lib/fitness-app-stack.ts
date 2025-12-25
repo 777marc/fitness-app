@@ -11,28 +11,42 @@ export class FitnessAppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // Create VPC with public and private subnets
-    const vpc = new ec2.Vpc(this, "FitnessAppVpc", {
-      maxAzs: 2,
-      natGateways: 1,
-      subnetConfiguration: [
-        {
-          cidrMask: 24,
-          name: "Public",
-          subnetType: ec2.SubnetType.PUBLIC,
-        },
-        {
-          cidrMask: 24,
-          name: "Private",
-          subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
-        },
-        {
-          cidrMask: 28,
-          name: "Database",
-          subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
-        },
-      ],
-    });
+    // Look up existing VPC or create a new one
+    // To use an existing VPC, set the VPC_ID environment variable or context value
+    const vpcId = process.env.VPC_ID || "vpc-0c32ccef46a5aa87b"; //this.node.tryGetContext("vpcId");
+
+    let vpc: ec2.IVpc;
+    if (vpcId) {
+      // Use existing VPC
+      vpc = ec2.Vpc.fromLookup(this, "ExistingVpc", {
+        vpcId: vpcId,
+      });
+      console.log(`Using existing VPC: ${vpcId}`);
+    } else {
+      // Create new VPC with public and private subnets
+      vpc = new ec2.Vpc(this, "FitnessAppVpc", {
+        maxAzs: 2,
+        natGateways: 1,
+        subnetConfiguration: [
+          {
+            cidrMask: 24,
+            name: "Public",
+            subnetType: ec2.SubnetType.PUBLIC,
+          },
+          {
+            cidrMask: 24,
+            name: "Private",
+            subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS,
+          },
+          {
+            cidrMask: 28,
+            name: "Database",
+            subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+          },
+        ],
+      });
+      console.log("Created new VPC");
+    }
 
     // Create secret for NextAuth
     const nextAuthSecret = new secretsmanager.Secret(this, "NextAuthSecret", {
@@ -62,6 +76,38 @@ export class FitnessAppStack extends cdk.Stack {
       allowAllOutbound: false,
     });
 
+    // Determine subnet selection based on VPC type
+    let dbSubnets: ec2.SubnetSelection;
+    if (vpcId) {
+      // For existing VPCs, try to use the best available subnet type
+      const hasIsolatedSubnets = vpc.isolatedSubnets.length > 0;
+      const hasPrivateSubnets = vpc.privateSubnets.length > 0;
+      const hasPublicSubnets = vpc.publicSubnets.length > 0;
+
+      if (hasIsolatedSubnets) {
+        dbSubnets = { subnetType: ec2.SubnetType.PRIVATE_ISOLATED };
+        console.log("Using isolated subnets for database");
+      } else if (hasPrivateSubnets) {
+        dbSubnets = { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS };
+        console.log("Using private subnets for database");
+      } else if (hasPublicSubnets) {
+        // Last resort: use public subnets (not recommended for production)
+        dbSubnets = { subnetType: ec2.SubnetType.PUBLIC };
+        console.warn(
+          "WARNING: Using public subnets for database. This is not recommended for production!"
+        );
+      } else {
+        throw new Error(
+          "VPC has no suitable subnets. Please use a VPC with private or isolated subnets."
+        );
+      }
+    } else {
+      // For newly created VPCs, use isolated subnets
+      dbSubnets = {
+        subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
+      };
+    }
+
     const database = new rds.DatabaseInstance(this, "FitnessAppDB", {
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_16,
@@ -71,9 +117,7 @@ export class FitnessAppStack extends cdk.Stack {
         ec2.InstanceSize.MICRO
       ),
       vpc,
-      vpcSubnets: {
-        subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
-      },
+      vpcSubnets: dbSubnets,
       securityGroups: [dbSecurityGroup],
       credentials: rds.Credentials.fromSecret(dbSecret),
       databaseName: "fitnessapp",
@@ -98,6 +142,14 @@ export class FitnessAppStack extends cdk.Stack {
       retention: logs.RetentionDays.ONE_WEEK,
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
+
+    // Determine if we need to assign public IPs to ECS tasks
+    const needsPublicIp = vpcId && vpc.privateSubnets.length === 0;
+    if (needsPublicIp) {
+      console.log(
+        "ECS tasks will be assigned public IPs (VPC has no private subnets)"
+      );
+    }
 
     // Create Fargate service with ALB
     const fargateService =
@@ -137,7 +189,8 @@ export class FitnessAppStack extends cdk.Stack {
             }),
           },
           publicLoadBalancer: true,
-          assignPublicIp: false,
+          // Assign public IP if using public subnets, otherwise don't
+          assignPublicIp: needsPublicIp,
         }
       );
 

@@ -6,7 +6,7 @@ This guide will help you deploy the Fitness App to AWS using ECS Fargate with a 
 
 The CDK stack creates:
 
-- **VPC**: Multi-AZ VPC with public, private, and isolated subnets
+- **VPC**: Multi-AZ VPC with public, private, and isolated subnets (or uses an existing VPC)
 - **ECS Fargate**: Containerized Next.js application
 - **Application Load Balancer**: Public-facing load balancer
 - **RDS PostgreSQL**: Managed database in isolated subnets
@@ -27,6 +27,41 @@ The CDK stack creates:
    ```bash
    npm install -g aws-cdk
    ```
+
+## Configuration Options
+
+### Using an Existing VPC
+
+By default, the stack creates a new VPC. To use an existing VPC instead, provide the VPC ID using either:
+
+**Option 1: Environment Variable**
+
+```bash
+export VPC_ID=vpc-xxxxxxxxxxxxxxxxx
+npm run deploy
+```
+
+**Option 2: CDK Context**
+
+```bash
+cdk deploy -c vpcId=vpc-xxxxxxxxxxxxxxxxx
+```
+
+**Option 3: cdk.context.json**
+Create or edit `cdk.context.json`:
+
+```json
+{
+  "vpcId": "vpc-xxxxxxxxxxxxxxxxx"
+}
+```
+
+> **Note**: When using an existing VPC, ensure it has:
+>
+> - At least 2 availability zones
+> - Public subnets (for the load balancer)
+> - Private subnets with NAT gateway access (for ECS tasks)
+> - Isolated subnets (for RDS database)
 
 ## Initial Setup
 
