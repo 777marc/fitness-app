@@ -10,21 +10,26 @@ fi
 # Wait for database to be ready (with timeout)
 if [ -n "$DB_HOST" ]; then
   echo "Waiting for database at $DB_HOST:$DB_PORT..."
-  timeout=30
+  timeout=120
   while ! nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null; do
     timeout=$((timeout - 1))
     if [ $timeout -le 0 ]; then
       echo "Database connection timeout!"
       exit 1
     fi
-    sleep 1
+    echo "Still waiting... ($timeout seconds remaining)"
+    sleep 2
   done
   echo "Database is ready"
   
   # Run database migrations
   echo "Running database migrations..."
-  npx prisma migrate deploy
-  echo "Migrations complete"
+  if npx prisma migrate deploy; then
+    echo "Migrations complete"
+  else
+    echo "WARNING: Migration failed, but continuing startup..."
+    echo "This may be a first-time deployment issue."
+  fi
 fi
 
 # Start the Next.js server

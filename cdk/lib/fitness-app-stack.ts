@@ -144,7 +144,7 @@ export class FitnessAppStack extends cdk.Stack {
     });
 
     // Determine if we need to assign public IPs to ECS tasks
-    const needsPublicIp = vpcId && vpc.privateSubnets.length === 0;
+    const needsPublicIp = !!(vpcId && vpc.privateSubnets.length === 0);
     if (needsPublicIp) {
       console.log(
         "ECS tasks will be assigned public IPs (VPC has no private subnets)"
@@ -162,6 +162,7 @@ export class FitnessAppStack extends cdk.Stack {
           cpu: 512,
           memoryLimitMiB: 1024,
           desiredCount: 1,
+          healthCheckGracePeriod: cdk.Duration.seconds(300),
           taskImageOptions: {
             image: ecs.ContainerImage.fromAsset("..", {
               file: "Dockerfile",
@@ -191,8 +192,21 @@ export class FitnessAppStack extends cdk.Stack {
           publicLoadBalancer: true,
           // Assign public IP if using public subnets, otherwise don't
           assignPublicIp: needsPublicIp,
+          circuitBreaker: { rollback: true },
         }
       );
+
+    // Configure deployment circuit breaker
+    const cfnService = fargateService.service.node
+      .defaultChild as ecs.CfnService;
+    cfnService.deploymentConfiguration = {
+      maximumPercent: 200,
+      minimumHealthyPercent: 0, // Allow tasks to be replaced during initial deployment
+      deploymentCircuitBreaker: {
+        enable: true,
+        rollback: true,
+      },
+    };
 
     // Allow ECS tasks to connect to RDS
     dbSecurityGroup.addIngressRule(
@@ -201,13 +215,13 @@ export class FitnessAppStack extends cdk.Stack {
       "Allow ECS tasks to connect to RDS"
     );
 
-    // Configure health check
+    // Configure health check with more lenient settings for startup
     fargateService.targetGroup.configureHealthCheck({
       path: "/api/health",
-      interval: cdk.Duration.seconds(60),
-      timeout: cdk.Duration.seconds(5),
+      interval: cdk.Duration.seconds(30),
+      timeout: cdk.Duration.seconds(10),
       healthyThresholdCount: 2,
-      unhealthyThresholdCount: 3,
+      unhealthyThresholdCount: 5,
     });
 
     // Auto-scaling configuration
