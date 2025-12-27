@@ -24,11 +24,24 @@ if [ -n "$DB_HOST" ]; then
   
   # Run database migrations
   echo "Running database migrations..."
-  if npx prisma migrate deploy; then
-    echo "Migrations complete"
+  echo "DATABASE_URL: postgresql://${DB_USER}:***@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  
+  # Try migrate deploy first (for production with migration files)
+  if npx prisma migrate deploy 2>&1; then
+    echo "Migrations deployed successfully"
   else
-    echo "WARNING: Migration failed, but continuing startup..."
-    echo "This may be a first-time deployment issue."
+    echo "Migrate deploy failed, trying db push..."
+    # Fallback to db push (syncs schema without migration history)
+    if npx prisma db push --skip-generate 2>&1; then
+      echo "Database schema pushed successfully"
+    else
+      echo "ERROR: Failed to initialize database schema!"
+      echo "Checking Prisma setup..."
+      ls -la /app/prisma/ || echo "Prisma directory not found"
+      echo "Schema file:"
+      cat /app/prisma/schema.prisma || echo "Schema file not found"
+      exit 1
+    fi
   fi
 fi
 
